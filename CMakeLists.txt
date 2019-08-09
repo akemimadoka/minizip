@@ -7,6 +7,8 @@
 
 cmake_minimum_required(VERSION 3.0.2)
 
+project(minizip C CXX)
+
 message(STATUS "Using CMake version ${CMAKE_VERSION}")
 
 option(MZ_COMPAT "Enables compatibility layer" ON)
@@ -23,6 +25,67 @@ option(MZ_DECOMPRESS_ONLY "Only support decompression" OFF)
 option(MZ_BUILD_TEST "Builds minizip test executable" OFF)
 option(MZ_BUILD_UNIT_TEST "Builds minizip unit test project" OFF)
 option(MZ_BUILD_FUZZ_TEST "Builds minizip fuzzer executables" OFF)
+
+macro(Normalize VAR)
+    if(${VAR})
+        set(${VAR} True)
+    else()
+        set(${VAR} False)
+    endif()
+endmacro()
+
+Normalize(MZ_COMPAT)
+Normalize(MZ_ZLIB)
+Normalize(MZ_BZIP2)
+Normalize(MZ_LZMA)
+Normalize(MZ_PKCRYPT)
+Normalize(MZ_WZAES)
+Normalize(MZ_LIBCOMP)
+Normalize(MZ_OPENSSL)
+Normalize(MZ_BRG)
+Normalize(MZ_COMPRESS_ONLY)
+Normalize(MZ_DECOMPRESS_ONLY)
+Normalize(MZ_BUILD_TEST)
+Normalize(MZ_BUILD_UNIT_TEST)
+Normalize(MZ_BUILD_FUZZ_TEST)
+
+if(CONAN_EXPORTED)
+    include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
+    conan_basic_setup(TARGETS)
+else()
+	if(NOT EXISTS "${CMAKE_BINARY_DIR}/conan.cmake")
+		message(STATUS "Downloading conan.cmake from https://github.com/conan-io/cmake-conan")
+		file(DOWNLOAD "https://raw.githubusercontent.com/conan-io/cmake-conan/v0.14/conan.cmake"
+					  "${CMAKE_BINARY_DIR}/conan.cmake")
+	endif()
+
+    include(${CMAKE_BINARY_DIR}/conan.cmake)
+
+    conan_add_remote(NAME public-conan
+        URL https://api.bintray.com/conan/bincrafters/public-conan)
+
+    conan_add_remote(NAME Chino-Testing
+        URL https://api.bintray.com/conan/chino/Testing)
+
+	conan_cmake_run(CONANFILE conanfile.py
+					BASIC_SETUP CMAKE_TARGETS
+                    BUILD missing
+                    OPTIONS
+                        MZ_COMPAT=${MZ_COMPAT}
+                        MZ_ZLIB=${MZ_ZLIB}
+                        MZ_BZIP2=${MZ_BZIP2}
+                        MZ_LZMA=${MZ_LZMA}
+                        MZ_PKCRYPT=${MZ_PKCRYPT}
+                        MZ_WZAES=${MZ_WZAES}
+                        MZ_LIBCOMP=${MZ_LIBCOMP}
+                        MZ_OPENSSL=${MZ_OPENSSL}
+                        MZ_BRG=${MZ_BRG}
+                        MZ_COMPRESS_ONLY=${MZ_COMPRESS_ONLY}
+                        MZ_DECOMPRESS_ONLY=${MZ_DECOMPRESS_ONLY}
+                        MZ_BUILD_TEST=${MZ_BUILD_TEST}
+                        MZ_BUILD_UNIT_TEST=${MZ_BUILD_UNIT_TEST}
+                        MZ_BUILD_FUZZ_TEST=${MZ_BUILD_FUZZ_TEST})
+endif()
 
 if(POLICY CMP0074)
     cmake_policy(SET CMP0074 OLD)
@@ -57,92 +120,9 @@ set(INSTALL_CMAKE_DIR "${CMAKE_INSTALL_FULL_LIBDIR}/cmake/minizip" CACHE PATH "I
 set(MINIZIP_PC ${CMAKE_CURRENT_BINARY_DIR}/minizip.pc)
 configure_file(minizip.pc.cmakein ${MINIZIP_PC} @ONLY)
 
-# Check if zlib installation is present
-if(MZ_ZLIB AND NOT MZ_LIBCOMP)
-    find_package(ZLIB)
-    if(ZLIB_FOUND)
-        message(STATUS "Using ZLIB ${ZLIB_VERSION_STRING}")
-        include_directories(${ZLIB_INCLUDE_DIRS})
-    else()
-        if (NOT ZLIB_TAG)
-            set(ZLIB_TAG master)
-        endif()
-        if (NOT ZLIB_REPOSITORY)
-            set(ZLIB_REPOSITORY https://github.com/madler/zlib)
-        endif()
-
-        message(STATUS "Using ZLIB ${ZLIB_REPOSITORY} ${ZLIB_TAG}")
-
-        set(ZLIB_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/zlib)
-        set(ZLIB_INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR}/install/zlib)
-        set(ZLIB_INCLUDE_DIRS ${ZLIB_INSTALL_DIR}/include)
-
-        if(WIN32)
-            set(ZLIB_LIBRARIES
-                ${ZLIB_INSTALL_DIR}/lib/zlibstatic$<$<CONFIG:Debug>:d>.lib)
-            set(ZLIB_BYPRODUCTS
-                ${ZLIB_INSTALL_DIR}/lib/zlibstatic.lib ${ZLIB_INSTALL_DIR}/lib/zlibstaticd.lib)
-        else()
-            set(ZLIB_LIBRARIES
-                ${ZLIB_INSTALL_DIR}/lib/libz.a)
-            set(ZLIB_BYPRODUCTS
-                ${ZLIB_INSTALL_DIR}/lib/libz.a)
-        endif()
-
-        # Build args variable based on cache variables
-        unset(CMAKE_ARGS)
-        get_cmake_property(CACHE_VARS CACHE_VARIABLES)
-        foreach(CACHE_VAR ${CACHE_VARS})
-            get_property(CACHE_VAR_HELPSTRING CACHE ${CACHE_VAR} PROPERTY HELPSTRING)
-            if(CACHE_VAR_HELPSTRING STREQUAL "No help, variable specified on the command line.")
-                get_property(CACHE_VAR_TYPE CACHE ${CACHE_VAR} PROPERTY TYPE)
-                if(CACHE_VAR_TYPE STREQUAL "UNINITIALIZED")
-                    set(CACHE_VAR_TYPE)
-                else()
-                    set(CACHE_VAR_TYPE :${CACHE_VAR_TYPE})
-                endif()
-                if (NOT CACHE_VAR MATCHES "^MZ_")
-                    list(APPEND CMAKE_ARGS "-D${CACHE_VAR}${CACHE_VAR_TYPE}=${${CACHE_VAR}}")
-                endif()
-            endif()
-        endforeach()
-
-        ExternalProject_Add(zlib
-            PREFIX zlib
-            GIT_REPOSITORY ${ZLIB_REPOSITORY}
-            GIT_TAG ${ZLIB_TAG}
-            SOURCE_DIR ${ZLIB_SOURCE_DIR}
-            BUILD_IN_SOURCE 1
-            INSTALL_DIR ${ZLIB_INSTALL_DIR}
-            BUILD_BYPRODUCTS ${ZLIB_BYPRODUCTS}
-            UPDATE_COMMAND ""
-            CMAKE_ARGS "${CMAKE_ARGS};-DCMAKE_INSTALL_PREFIX:STRING=${ZLIB_INSTALL_DIR}")
-
-        include_directories(${ZLIB_INCLUDE_DIRS})
-    endif()
-endif()
-
 # Check if bzip2 installation is present
 if(MZ_BZIP2)
-    find_package(BZip2)
-    if(BZIP2_FOUND)
-        message(STATUS "Using BZIP2 ${BZIP2_VERSION_STRING}")
-        include_directories(${BZIP2_INCLUDE_DIRS})
-        add_definitions(-DHAVE_BZIP2)
-    endif()
-endif()
-
-# Check to see if openssl installation is present
-if(MZ_OPENSSL)
-    find_package(OpenSSL)
-    if (OPENSSL_FOUND)
-        message(STATUS "Using OpenSSL ${OPENSSL_VERSION}")
-
-        include_directories(${OPENSSL_INCLUDE_DIR})
-        if(OPENSSL_INCLUDE_DIRS)
-            include_directories(${OPENSSL_INCLUDE_DIRS})
-        endif()
-    endif()
+    add_definitions(-DHAVE_BZIP2)
 endif()
 
 # Check for system includes
@@ -306,12 +286,6 @@ if(UNIX)
                 endif()
             endif()
         endif()
-    endif()
-
-    find_package(Iconv QUIET)
-    if (Iconv_FOUND)
-        message(STATUS "Using Iconv")
-        include_directories(${Iconv_INCLUDE_DIRS})
     endif()
 endif()
 
@@ -582,8 +556,6 @@ endif()
 # Create minizip library
 source_group("Minizip" FILES ${MINIZIP_SRC} ${MINIZIP_PUBLIC_HEADERS})
 
-project(minizip)
-
 add_library(${PROJECT_NAME}
                 ${MINIZIP_SRC} ${MINIZIP_PUBLIC_HEADERS}
                 ${BRG_SRC} ${BRG_PUBLIC_HEADERS}
@@ -603,22 +575,19 @@ endif()
 
 # Link with external libraries
 if(MZ_ZLIB AND NOT MZ_LIBCOMP)
-    target_link_libraries(${PROJECT_NAME} ${ZLIB_LIBRARIES})
-    if(NOT ZLIB_FOUND)
-        add_dependencies(${PROJECT_NAME} zlib)
-    endif()
+    target_link_libraries(${PROJECT_NAME} PUBLIC CONAN_PKG::zlib)
 endif()
 if(MZ_BZIP2 AND BZIP2_FOUND)
-    target_link_libraries(${PROJECT_NAME} ${BZIP2_LIBRARIES})
+    target_link_libraries(${PROJECT_NAME} PUBLIC CONAN_PKG::bzip2)
 endif()
 if(MZ_LIBCOMP)
-    target_link_libraries(${PROJECT_NAME} compression)
+    target_link_libraries(${PROJECT_NAME} PUBLIC compression)
 endif()
-if(Iconv_FOUND AND NOT Iconv_IS_BUILT_IN)
-    target_link_libraries(${PROJECT_NAME} ${Iconv_LIBRARIES})
+if(UNIX)
+    target_link_libraries(${PROJECT_NAME} PUBLIC CONAN_PKG::iconv)
 endif()
-if(MZ_OPENSSL AND OPENSSL_FOUND)
-    target_link_libraries(${PROJECT_NAME} ${OPENSSL_LIBRARIES})
+if(MZ_OPENSSL)
+    target_link_libraries(${PROJECT_NAME} CONAN_PKG::OpenSSL)
 elseif(UNIX)
     if(APPLE AND NOT MZ_BRG)
         message(STATUS "Using CoreFoundation Framework")
