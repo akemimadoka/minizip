@@ -575,7 +575,7 @@ endif()
 
 # Link with external libraries
 if(MZ_ZLIB AND NOT MZ_LIBCOMP)
-    target_link_libraries(${PROJECT_NAME} PUBLIC CONAN_PKG::ZLIB)
+    target_link_libraries(${PROJECT_NAME} PUBLIC CONAN_PKG::zlib)
 endif()
 if(MZ_BZIP2 AND BZIP2_FOUND)
     target_link_libraries(${PROJECT_NAME} PUBLIC CONAN_PKG::bzip2)

@@ -27,18 +27,17 @@ class MinizipConan(ConanFile):
 
     def requirements(self):
         if self.options.MZ_ZLIB:
-            self.requires("zlib/1.2.11@conan/stable")
+            self.requires("zlib/1.2.11")
         if self.options.MZ_BZIP2:
-            self.requires("bzip2/1.0.8@conan/stable")
+            self.requires("bzip2/1.0.8")
         if self.options.MZ_OPENSSL:
-            self.requires("OpenSSL/1.1.1d@conan/stable")
+            self.requires("openssl/1.1.1d")
         if not self.settings.os in ["Windows", "WindowsStore", "WindowsCE"]:
-            self.requires("libiconv/1.15@bincrafters/stable")
+            self.requires("libiconv/1.15")
 
     def configure_cmake(self):
         cmake = CMake(self)
 
-        cmake.definitions["BUILD_SHARED_LIBS"] = "ON" if self.options.shared else "OFF"
         for opt in Options:
             cmake.definitions[opt[0]] = getattr(self.options, opt[0])
 
@@ -55,3 +54,5 @@ class MinizipConan(ConanFile):
 
     def package_info(self):
         self.cpp_info.libs = tools.collect_libs(self)
+        if self.settings.os == "Windows":
+            self.cpp_info.libs.append("Crypt32")
